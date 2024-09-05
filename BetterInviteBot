@@ -1,0 +1,111 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+
+intents = discord.Intents.default()
+intents.members = True  # pour suivre les arrivées/départs
+
+bot = commands.Bot(command_prefix='/', intents=intents)
+
+# Variables globales (à remplacer plus tard par une base de données ou config)
+join_channel_id = None
+leave_channel_id = None
+join_message = "Bienvenue {member} !"
+leave_message = "Au revoir {member}."
+invite_count = {}
+
+# Définir un salon de bienvenue
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def set_join_channel(ctx, channel: discord.TextChannel):
+    global join_channel_id
+    join_channel_id = channel.id
+    await ctx.send(f"Le salon d'arrivée a été défini sur {channel.mention}")
+
+# Définir un salon de départ
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def set_leave_channel(ctx, channel: discord.TextChannel):
+    global leave_channel_id
+    leave_channel_id = channel.id
+    await ctx.send(f"Le salon de départ a été défini sur {channel.mention}")
+
+# Définir un message personnalisé pour les arrivées
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def set_join_message(ctx, *, message: str):
+    global join_message
+    join_message = message
+    await ctx.send(f"Message d'arrivée personnalisé défini : {message}")
+
+# Définir un message personnalisé pour les départs
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def set_leave_message(ctx, *, message: str):
+    global leave_message
+    leave_message = message
+    await ctx.send(f"Message de départ personnalisé défini : {message}")
+
+# Sur l'arrivée d'un membre
+@bot.event
+async def on_member_join(member):
+    if join_channel_id:
+        channel = bot.get_channel(join_channel_id)
+        await channel.send(join_message.format(member=member.mention))
+    # Traquer les invites
+    inviter = await get_inviter(member)
+    if inviter:
+        invite_count[inviter.id] = invite_count.get(inviter.id, 0) + 1
+
+# Sur le départ d'un membre
+@bot.event
+async def on_member_remove(member):
+    if leave_channel_id:
+        channel = bot.get_channel(leave_channel_id)
+        await channel.send(leave_message.format(member=member.mention))
+
+# /invite - voir ses invitations
+@bot.command()
+async def invite(ctx, member: discord.Member = None):
+    if member is None:
+        member = ctx.author
+    count = invite_count.get(member.id, 0)
+    await ctx.send(f"{member.mention} a invité {count} personne(s) !")
+
+# /invitebot - lien pour inviter le bot
+@bot.command()
+async def invitebot(ctx):
+    invite_url = discord.utils.oauth_url(bot.user.id, permissions=discord.Permissions(permissions=8))
+    await ctx.send(f"Invitez-moi avec ce lien : {invite_url}")
+
+# /giveaway - Commande réservée pour certains rôles
+@bot.command()
+@commands.has_role("Admin")  # Change "Admin" avec le rôle souhaité
+async def giveaway(ctx):
+    await ctx.send("C'est une commande réservée pour certains rôles.")
+
+# /reward - Créer une récompense
+@bot.command()
+@commands.has_role("Admin")  # Réserver cette commande à certains rôles
+async def reward(ctx, *, reward_name: str):
+    await ctx.send(f"Récompense '{reward_name}' créée !")
+
+# /rewardclaim - Réclamer la récompense
+@bot.command()
+async def rewardclaim(ctx, *, reward_name: str):
+    await ctx.send(f"{ctx.author.mention} a réclamé la récompense '{reward_name}' !")
+
+# /about - À propos du créateur
+@bot.command()
+async def about(ctx):
+    await ctx.send("Ce bot a été créé par <@1096832051413516329>.")
+
+# Fonction pour identifier qui a invité un membre
+async def get_inviter(member):
+    invites_before = await member.guild.invites()
+    for invite in invites_before:
+        if invite.uses > invite_count.get(invite.inviter.id, 0):
+            return invite.inviter
+    return None
+
+bot.run("MTI4MTM2NTI4NDQyNjQ4MTc1Nw.GWCUXx.ovPrv4FqLqRLpG5R6HmAYHrGx4658vXF677u7I")
